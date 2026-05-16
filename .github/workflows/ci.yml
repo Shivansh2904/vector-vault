@@ -1,0 +1,99 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master, develop]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  # ── Job 1: Python backend ────────────────────────────────────────────────
+  python:
+    name: Python — Lint & Import check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: Install dependencies
+        working-directory: backend
+        run: pip install --no-cache-dir -r requirements.txt
+
+      - name: Compile all Python files
+        working-directory: backend
+        run: |
+          python -m py_compile main.py
+          python -m py_compile chunker.py
+          python -m py_compile embedder.py
+          python -m py_compile store.py
+          echo "All Python files compiled successfully"
+
+      - name: Verify chunker logic
+        working-directory: backend
+        run: |
+          python -c "
+          from chunker import chunk_text
+          chunks = chunk_text('hello world ' * 200, chunk_size=50, overlap=10)
+          assert len(chunks) > 1, 'Expected multiple chunks'
+          assert all(isinstance(c, str) and c.strip() for c in chunks)
+          print(f'chunker OK — produced {len(chunks)} chunks')
+          "
+
+      - name: Check FastAPI app imports cleanly
+        working-directory: backend
+        run: |
+          python -c "
+          import sys, os
+          # Patch out heavy model loading so the import check is fast
+          import unittest.mock as mock
+          with mock.patch('sentence_transformers.SentenceTransformer') as MockST:
+              inst = mock.MagicMock()
+              inst.get_sentence_embedding_dimension.return_value = 384
+              MockST.return_value = inst
+              from main import app
+              print('FastAPI app imported successfully')
+              print(f'Routes: {[r.path for r in app.routes]}')
+          "
+
+  # ── Job 2: TypeScript frontend ───────────────────────────────────────────
+  typescript:
+    name: TypeScript — Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Type check
+        working-directory: frontend
+        run: npx tsc --noEmit
+
+      - name: Build production bundle
+        working-directory: frontend
+        run: npm run build
+
+      - name: Verify build output
+        working-directory: frontend
+        run: |
+          test -d dist && echo "dist/ exists"
+          test -f dist/index.html && echo "index.html present"
+          echo "Build artifacts:"
+          ls -lh dist/
