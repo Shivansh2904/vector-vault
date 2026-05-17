@@ -109,7 +109,7 @@ class DeleteResponse(BaseModel):
 # Helpers
 # ---------------------------------------------------------------------------
 
-_SUPPORTED_EXTENSIONS = {".pdf", ".txt", ".md"}
+_SUPPORTED_EXTENSIONS = {".pdf", ".txt", ".md", ".docx"}
 
 
 def _extract_text(filename: str, data: bytes) -> str:
@@ -127,6 +127,14 @@ def _extract_text(filename: str, data: bytes) -> str:
         reader = pypdf.PdfReader(io.BytesIO(data))
         pages = [page.extract_text() or "" for page in reader.pages]
         return "\n\n".join(pages)
+
+    if ext == ".docx":
+        try:
+            from docx import Document as DocxDocument
+        except ImportError as exc:
+            raise HTTPException(status_code=500, detail="python-docx not installed") from exc
+        doc = DocxDocument(io.BytesIO(data))
+        return "\n\n".join(p.text for p in doc.paragraphs if p.text.strip())
 
     if ext in {".txt", ".md", ""}:
         # Try common encodings gracefully.
@@ -202,6 +210,21 @@ async def list_documents() -> list[DocumentMeta]:
     """Return metadata for every document currently in the index."""
     docs = store.list_documents()
     return [DocumentMeta(**d) for d in docs]
+
+
+@app.get(
+    "/documents/{doc_id}",
+    response_model=DocumentMeta,
+    summary="Get a single document's metadata",
+    tags=["documents"],
+)
+async def get_document(doc_id: str) -> DocumentMeta:
+    """Return metadata for a single document by its doc_id."""
+    docs = store.list_documents()
+    for doc in docs:
+        if doc["doc_id"] == doc_id:
+            return DocumentMeta(**doc)
+    raise HTTPException(status_code=404, detail=f"Document '{doc_id}' not found")
 
 
 @app.delete(

@@ -46,6 +46,14 @@ jobs:
           print(f'chunker OK — produced {len(chunks)} chunks')
           "
 
+      - name: Install test dependencies
+        working-directory: backend
+        run: pip install -r requirements.txt pytest httpx
+
+      - name: Run backend tests
+        working-directory: backend
+        run: pytest tests/ -v
+
       - name: Check FastAPI app imports cleanly
         working-directory: backend
         run: |

@@ -15,7 +15,7 @@
 
 <br/>
 
-*Upload PDFs, text files, and Markdown. Ask questions in plain English. Get semantically ranked results — all without sending a single byte to any external service.*
+*Upload PDFs, text files, Markdown, and Word documents. Ask questions in plain English. Get semantically ranked results — all without sending a single byte to any external service.*
 
 [Quick Start](#-quick-start) · [Architecture](#-architecture) · [API Reference](#-api-reference) · [Performance](#-performance)
 
@@ -43,7 +43,7 @@ Most document search tools either require expensive API calls (OpenAI embeddings
 ┌─────────────────────────────────────────────────────────────────┐
 │                         INDEXING PIPELINE                        │
 │                                                                   │
-│   PDF / TXT / MD  ──▶  Chunker  ──▶  sentence-transformers      │
+│  PDF/TXT/MD/DOCX  ──▶  Chunker  ──▶  sentence-transformers      │
 │                        (512 words,     (all-MiniLM-L6-v2)        │
 │                         50 overlap)    384-dim embeddings         │
 │                                              │                    │
@@ -74,7 +74,7 @@ Most document search tools either require expensive API calls (OpenAI embeddings
 
 ## Features
 
-- **Multi-format ingestion** — PDF (via pypdf), plain text (.txt), and Markdown (.md)
+- **Multi-format ingestion** — PDF (via pypdf), plain text (.txt), Markdown (.md), and Word documents (.docx via python-docx)
 - **Smart chunking** — word-boundary aware, configurable chunk size and overlap
 - **Local embeddings** — `all-MiniLM-L6-v2` (22 M params, 384-dim, runs on CPU in milliseconds)
 - **FAISS vector index** — exact flat L2 search, persisted to disk across restarts
@@ -92,7 +92,7 @@ Most document search tools either require expensive API calls (OpenAI embeddings
 |---|---|
 | Embeddings | `sentence-transformers` — all-MiniLM-L6-v2 |
 | Vector index | `faiss-cpu` — FlatL2 |
-| PDF parsing | `pypdf` |
+| Document parsing | `pypdf` (PDF), `python-docx` (DOCX) |
 | Backend | `FastAPI` + `uvicorn` |
 | Data validation | `Pydantic v2` |
 | Frontend | `React 18` + `TypeScript 5` + `Vite` |
@@ -147,6 +147,7 @@ Visit http://localhost:5173 — the dev server proxies API calls to port 8000.
 |---|---|---|
 | `POST` | `/documents/upload` | Upload a document (multipart/form-data, field: `file`). Returns `doc_id`, `filename`, `chunk_count`. |
 | `GET` | `/documents` | List all indexed documents with metadata. |
+| `GET` | `/documents/{doc_id}` | Get metadata for a single document (`doc_id`, `filename`, `chunk_count`, `created_at`). Returns 404 if not found. |
 | `DELETE` | `/documents/{doc_id}` | Remove a document and all its vectors from the index. |
 | `POST` | `/search` | Search the corpus. Body: `{"query": "...", "top_k": 5}`. Returns ranked chunks with scores. |
 | `GET` | `/health` | API status, total documents, total chunks, index vector count. |
