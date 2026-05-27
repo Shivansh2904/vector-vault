@@ -11,7 +11,7 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://typescriptlang.org)
 [![Docker](https://img.shields.io/badge/Docker-ready-2496ED?style=flat-square&logo=docker&logoColor=white)](https://docker.com)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow?style=flat-square)](LICENSE)
-[![CI](https://img.shields.io/github/actions/workflow/status/shivansh-mishra/vector-vault/ci.yml?style=flat-square&label=CI)](https://github.com/shivansh-mishra/vector-vault/actions)
+[![CI](https://img.shields.io/github/actions/workflow/status/Shivansh2904/vector-vault/ci.yml?style=flat-square&label=CI)](https://github.com/Shivansh2904/vector-vault/actions)
 
 <br/>
 
@@ -108,7 +108,7 @@ Most document search tools either require expensive API calls (OpenAI embeddings
 ### Option A — Docker Compose (recommended)
 
 ```bash
-git clone https://github.com/shivansh-mishra/vector-vault.git
+git clone https://github.com/Shivansh2904/vector-vault.git
 cd vector-vault
 docker compose up --build
 ```
@@ -283,4 +283,4 @@ cd frontend && npm run build
 
 ## License
 
-MIT © 2024 [Shivansh Mishra](https://github.com/shivansh-mishra)
+MIT © 2024 [Shivansh Mishra](https://github.com/Shivansh2904)
