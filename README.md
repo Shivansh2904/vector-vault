@@ -103,6 +103,14 @@ Most document search tools either require expensive API calls (OpenAI embeddings
 
 ---
 
+## Deploy
+
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/Shivansh2904/vector-vault)
+
+A `render.yaml` blueprint provisions the backend on a Standard plan with a 5 GB persistent disk for the sentence-transformers model cache.
+
+---
+
 ## Quick Start
 
 ### Option A — Docker Compose (recommended)
