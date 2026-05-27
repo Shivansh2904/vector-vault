@@ -148,6 +148,7 @@ Visit http://localhost:5173 — the dev server proxies API calls to port 8000.
 | `POST` | `/documents/upload` | Upload a document (multipart/form-data, field: `file`). Returns `doc_id`, `filename`, `chunk_count`. |
 | `GET` | `/documents` | List all indexed documents with metadata. |
 | `GET` | `/documents/{doc_id}` | Get metadata for a single document (`doc_id`, `filename`, `chunk_count`, `created_at`). Returns 404 if not found. |
+| `GET` | `/documents/{doc_id}/chunks` | Inspect the text chunks a document was split into. |
 | `DELETE` | `/documents/{doc_id}` | Remove a document and all its vectors from the index. |
 | `POST` | `/search` | Search the corpus. Body: `{"query": "...", "top_k": 5}`. Returns ranked chunks with scores. |
 | `GET` | `/health` | API status, total documents, total chunks, index vector count. |

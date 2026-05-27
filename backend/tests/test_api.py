@@ -56,3 +56,23 @@ def test_delete_document():
 
     r3 = client.get(f"/documents/{doc_id}")
     assert r3.status_code == 404
+
+
+def test_get_document_chunks():
+    content = b"Chunk test content. " * 50
+    files = {"file": ("chunktest.txt", content, "text/plain")}
+    r = client.post("/documents/upload", files=files)
+    doc_id = r.json()["doc_id"]
+
+    r2 = client.get(f"/documents/{doc_id}/chunks")
+    assert r2.status_code == 200
+    data = r2.json()
+    assert data["doc_id"] == doc_id
+    assert data["filename"] == "chunktest.txt"
+    assert len(data["chunks"]) >= 1
+    assert all("text" in c and "chunk_index" in c for c in data["chunks"])
+
+
+def test_get_chunks_nonexistent():
+    r = client.get("/documents/nonexistent/chunks")
+    assert r.status_code == 404

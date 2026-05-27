@@ -3,11 +3,13 @@ main.py — VectorVault FastAPI application.
 
 Endpoints
 ---------
-POST   /documents/upload    Upload and index a document (PDF, TXT, MD)
-GET    /documents           List all indexed documents
-DELETE /documents/{doc_id}  Remove a document from the index
-POST   /search              Semantic search over the indexed corpus
-GET    /health              API health check with index statistics
+POST   /documents/upload         Upload and index a document (PDF, TXT, MD)
+GET    /documents                List all indexed documents
+GET    /documents/{doc_id}       Get a single document's metadata
+GET    /documents/{doc_id}/chunks Inspect chunks for a single document
+DELETE /documents/{doc_id}       Remove a document from the index
+POST   /search                   Semantic search over the indexed corpus
+GET    /health                   API health check with index statistics
 """
 
 from __future__ import annotations
@@ -103,6 +105,17 @@ class HealthResponse(BaseModel):
 class DeleteResponse(BaseModel):
     doc_id: str
     deleted: bool
+
+
+class ChunkInfo(BaseModel):
+    chunk_index: int
+    text: str
+
+
+class DocumentChunksResponse(BaseModel):
+    doc_id: str
+    filename: str
+    chunks: list[ChunkInfo]
 
 
 # ---------------------------------------------------------------------------
@@ -225,6 +238,31 @@ async def get_document(doc_id: str) -> DocumentMeta:
         if doc["doc_id"] == doc_id:
             return DocumentMeta(**doc)
     raise HTTPException(status_code=404, detail=f"Document '{doc_id}' not found")
+
+
+@app.get(
+    "/documents/{doc_id}/chunks",
+    response_model=DocumentChunksResponse,
+    summary="Get all chunks for a document",
+    tags=["documents"],
+)
+async def get_document_chunks(doc_id: str) -> DocumentChunksResponse:
+    """Return all text chunks for a given document, useful for inspecting how it was split."""
+    try:
+        chunks = store.get_chunks(doc_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail=f"Document '{doc_id}' not found")
+
+    # Get filename from metadata
+    docs = store.list_documents()
+    doc_meta = next((d for d in docs if d["doc_id"] == doc_id), None)
+    filename = doc_meta["filename"] if doc_meta else "unknown"
+
+    return DocumentChunksResponse(
+        doc_id=doc_id,
+        filename=filename,
+        chunks=[ChunkInfo(**c) for c in chunks],
+    )
 
 
 @app.delete(

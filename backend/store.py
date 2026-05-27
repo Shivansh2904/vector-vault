@@ -246,6 +246,27 @@ class DocumentStore:
             for doc_id, meta in self._docs.items()
         ]
 
+    def get_chunks(self, doc_id: str) -> list[dict[str, Any]]:
+        """Return all chunks for a single document with their text and position.
+
+        Chunks are returned in their original order (the order in which they
+        were indexed).  Each entry has a ``chunk_index`` (0-based position
+        within the document) and the chunk ``text``.
+
+        Raises
+        ------
+        KeyError
+            If ``doc_id`` is not present in the store.
+        """
+        if doc_id not in self._docs:
+            raise KeyError(f"Document {doc_id!r} not found")
+
+        doc = self._docs[doc_id]
+        return [
+            {"chunk_index": i, "text": self._chunk_texts.get(row, "")}
+            for i, row in enumerate(doc["chunk_ids"])
+        ]
+
     def get_stats(self) -> dict[str, int]:
         """Return aggregate index statistics."""
         return {
