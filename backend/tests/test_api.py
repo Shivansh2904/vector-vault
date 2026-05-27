@@ -76,3 +76,24 @@ def test_get_document_chunks():
 def test_get_chunks_nonexistent():
     r = client.get("/documents/nonexistent/chunks")
     assert r.status_code == 404
+
+
+def test_search_with_rerank_flag():
+    # Upload a doc first
+    content = b"Machine learning is a field of artificial intelligence. " * 30
+    files = {"file": ("ml.txt", content, "text/plain")}
+    client.post("/documents/upload", files=files)
+
+    # Search with rerank=False (default)
+    r = client.post("/search", json={"query": "artificial intelligence", "top_k": 3})
+    assert r.status_code == 200
+    assert r.json()["results"][0].get("rerank_score") is None
+
+    # Note: testing rerank=True requires the cross-encoder model to be downloaded,
+    # so we just verify the API accepts the flag without 422.
+    r2 = client.post("/search", json={
+        "query": "artificial intelligence",
+        "top_k": 3,
+        "rerank": False,  # keep False to avoid downloading the cross-encoder in CI
+    })
+    assert r2.status_code == 200

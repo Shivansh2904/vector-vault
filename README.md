@@ -150,7 +150,7 @@ Visit http://localhost:5173 — the dev server proxies API calls to port 8000.
 | `GET` | `/documents/{doc_id}` | Get metadata for a single document (`doc_id`, `filename`, `chunk_count`, `created_at`). Returns 404 if not found. |
 | `GET` | `/documents/{doc_id}/chunks` | Inspect the text chunks a document was split into. |
 | `DELETE` | `/documents/{doc_id}` | Remove a document and all its vectors from the index. |
-| `POST` | `/search` | Search the corpus. Body: `{"query": "...", "top_k": 5}`. Returns ranked chunks with scores. |
+| `POST` | `/search` | Search the corpus. Body: `{"query": "...", "top_k": 5, "rerank": false, "candidates_multiplier": 3}`. When `rerank` is true, fetches `top_k * candidates_multiplier` candidates via the bi-encoder and re-scores them with a cross-encoder for higher accuracy. Returns ranked chunks with scores (and `rerank_score` when reranking). |
 | `GET` | `/health` | API status, total documents, total chunks, index vector count. |
 
 Full interactive docs available at `http://localhost:8000/docs` (Swagger UI) and `http://localhost:8000/redoc` (ReDoc).
@@ -169,6 +169,31 @@ curl -X POST http://localhost:8000/search \
   -d '{"query": "what are the key risks?", "top_k": 3}'
 ```
 
+**Example — search with cross-encoder reranking:**
+```bash
+curl -X POST http://localhost:8000/search \
+  -H "Content-Type: application/json" \
+  -d '{"query": "what are the key risks?", "top_k": 3, "rerank": true, "candidates_multiplier": 4}'
+```
+
+---
+
+## Two-Stage Retrieval (Bi-encoder + Cross-encoder)
+
+VectorVault supports the standard production search pattern of **two-stage retrieval**:
+
+1. **Stage 1 — Recall (bi-encoder):** the FAISS index returns a large candidate pool (`top_k * candidates_multiplier`) using cosine similarity on independently-embedded query and chunk vectors. This is fast — sub-millisecond per query against tens of thousands of vectors — but the bi-encoder never sees the query and chunk together, so its ranking is coarse.
+2. **Stage 2 — Precision (cross-encoder):** the candidate pool is re-scored by a cross-encoder (`cross-encoder/ms-marco-MiniLM-L-6-v2`) which takes `(query, chunk)` as a single input and outputs a relevance score. Cross-encoders are slower (no pre-computed vectors — every query-doc pair runs through the model) but materially more accurate.
+
+Enable it per-request by sending `"rerank": true`. The cross-encoder model is downloaded lazily on first use (~90 MB). When reranking is on, each result also includes a `rerank_score` alongside the original bi-encoder `score`.
+
+```
+Query  ─▶  Bi-encoder  ─▶  FAISS  ─▶  N candidates  ─▶  Cross-encoder  ─▶  Top-K
+            (fast)                     (e.g. 15)         (accurate)         (e.g. 5)
+```
+
+**When to use it:** higher recall queries where the top result really matters (chatbot grounding, RAG, "find the one paragraph that answers this"). The latency cost is roughly 50–200 ms for 15–30 candidates on CPU.
+
 ---
 
 ## Project Structure
@@ -179,6 +204,7 @@ vector-vault/
 │   ├── main.py           # FastAPI app, routes, request/response schemas
 │   ├── chunker.py        # Word-boundary text chunking utility
 │   ├── embedder.py       # sentence-transformers wrapper (L2-normalised)
+│   ├── reranker.py       # Cross-encoder reranker for two-stage retrieval
 │   ├── store.py          # FAISS index + metadata store with persistence
 │   ├── requirements.txt
 │   └── Dockerfile

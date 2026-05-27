@@ -24,6 +24,7 @@ from pydantic import BaseModel, Field
 
 from chunker import chunk_text
 from embedder import Embedder
+from reranker import Reranker
 from store import DocumentStore
 
 # ---------------------------------------------------------------------------
@@ -57,6 +58,7 @@ app.add_middleware(
 
 embedder = Embedder()
 store = DocumentStore(dimension=embedder.dimension)
+reranker = Reranker()
 
 # ---------------------------------------------------------------------------
 # Pydantic schemas
@@ -79,6 +81,8 @@ class DocumentMeta(BaseModel):
 class SearchRequest(BaseModel):
     query: str = Field(..., min_length=1, description="Natural-language search query")
     top_k: int = Field(5, ge=1, le=20, description="Number of results to return")
+    rerank: bool = Field(False, description="Use cross-encoder reranking for higher accuracy (slower)")
+    candidates_multiplier: int = Field(3, ge=1, le=10, description="When reranking, fetch top_k * this many candidates first")
 
 
 class SearchResult(BaseModel):
@@ -86,6 +90,7 @@ class SearchResult(BaseModel):
     doc_filename: str
     chunk_text: str
     score: float
+    rerank_score: float | None = None
 
 
 class SearchResponse(BaseModel):
@@ -288,13 +293,26 @@ async def delete_document(doc_id: str) -> DeleteResponse:
     tags=["search"],
 )
 async def search(request: SearchRequest) -> SearchResponse:
-    """Embed the query and return the top-K most similar document chunks."""
+    """Embed the query and return the top-K most similar document chunks.
+
+    When ``rerank`` is true, fetch ``top_k * candidates_multiplier`` candidates
+    via the bi-encoder and re-score them with a cross-encoder for higher
+    accuracy (at the cost of additional latency).
+    """
     stats = store.get_stats()
     if stats["total_chunks"] == 0:
         return SearchResponse(query=request.query, results=[])
 
     query_vec = embedder.embed_query(request.query)
-    raw = store.search(query_vec, top_k=request.top_k)
+
+    if request.rerank:
+        # Fetch more candidates, then rerank
+        candidate_count = min(request.top_k * request.candidates_multiplier, 100)
+        raw = store.search(query_vec, top_k=candidate_count)
+        if raw:
+            raw = reranker.rerank(request.query, raw, top_k=request.top_k)
+    else:
+        raw = store.search(query_vec, top_k=request.top_k)
 
     results = [SearchResult(**r) for r in raw]
     return SearchResponse(query=request.query, results=results)
