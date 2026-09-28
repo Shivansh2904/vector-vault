@@ -144,12 +144,18 @@ repository root; `make help` lists the other targets.
 | Variable | When it is read | Default | Meaning |
 |---|---|---|---|
 | `DATA_DIR` | backend start-up | `data` | Where `index.faiss` and `metadata.json` are stored |
+| `CORS_ORIGINS` | backend start-up | `http://localhost:5173,http://127.0.0.1:5173` | Comma-separated origins whose pages may read API responses in a browser. Set it if the UI is served from another address. An empty value allows none. |
 | `VITE_API_URL` | when the frontend is built or the dev server starts | `http://localhost:8000` | API address the UI calls |
 
 ## Limitations
 
-- **No authentication.** The API also allows cross-origin requests from any
-  site. Keep it on localhost. Docker Compose binds it to 127.0.0.1.
+- **No authentication and no upload size limit.** Anyone who can reach the
+  API can upload, read and delete documents, and each upload is read into
+  memory whole. Keep it on localhost. Docker Compose binds it to 127.0.0.1.
+- **CORS limits reading, not sending.** Browsers only let pages from
+  `CORS_ORIGINS` read API responses. A page on another site can still send
+  a request that needs no CORS preflight, such as a form upload to
+  `/documents/upload`; it just cannot read the reply.
 - **Uploads block the server.** Parsing and embedding run inside `async`
   routes, so other requests wait until a large upload has finished.
 - **Delete is a soft delete.** Deleted vectors stay in `index.faiss` and are

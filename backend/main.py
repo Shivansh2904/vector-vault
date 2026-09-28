@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import io
 import logging
+import os
 from typing import Any
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
@@ -44,10 +45,23 @@ app = FastAPI(
     version="1.0.0",
 )
 
+# Browsers only let these origins read API responses. The defaults are the
+# Vite dev server and the Docker Compose UI, which both serve on port 5173.
+DEFAULT_CORS_ORIGINS = ["http://localhost:5173", "http://127.0.0.1:5173"]
+
+
+def cors_origins() -> list[str]:
+    """Return the allowed origins: CORS_ORIGINS (comma-separated) if set, else the defaults."""
+    raw = os.getenv("CORS_ORIGINS")
+    if raw is None:
+        return list(DEFAULT_CORS_ORIGINS)
+    return [origin.strip() for origin in raw.split(",") if origin.strip()]
+
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=cors_origins(),
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )

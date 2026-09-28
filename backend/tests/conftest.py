@@ -23,6 +23,8 @@ def app_module(tmp_path_factory):
     # it at a throwaway directory before importing.
     with pytest.MonkeyPatch.context() as mp:
         mp.setenv("DATA_DIR", str(tmp_path_factory.mktemp("import-data")))
+        # CORS is configured at import too; test the default origins.
+        mp.delenv("CORS_ORIGINS", raising=False)
         import main
     return main
 
