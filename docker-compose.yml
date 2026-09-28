@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   backend:
     build:
@@ -7,15 +5,17 @@ services:
       dockerfile: Dockerfile
     container_name: vectorvault-backend
     ports:
-      - "8000:8000"
+      # Localhost only: the API has no authentication.
+      - "127.0.0.1:8000:8000"
     volumes:
       - ./data:/app/data
     environment:
       - DATA_DIR=/app/data
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-      interval: 30s
+      # python:3.11-slim has no curl or wget, so check with Python itself.
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=5)"]
+      interval: 10s
       timeout: 10s
       retries: 3
       start_period: 60s
@@ -26,12 +26,8 @@ services:
       dockerfile: Dockerfile
     container_name: vectorvault-frontend
     ports:
-      - "5173:80"
+      - "127.0.0.1:5173:80"
     depends_on:
       backend:
         condition: service_healthy
     restart: unless-stopped
-    environment:
-      - VITE_API_URL=http://localhost:8000
-
-volumes: {}
