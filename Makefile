@@ -1,42 +1,43 @@
-.PHONY: install backend frontend test docker-up docker-down clean
+.PHONY: help install install-backend install-frontend backend frontend test build-frontend docker-up docker-down clean
 
 PYTHON ?= python
-PIP ?= pip
+
+help:
+	@echo "make install         Install backend (with test tools) and frontend dependencies"
+	@echo "make backend         Run the API on http://localhost:8000"
+	@echo "make frontend        Run the Vite dev server on http://localhost:5173"
+	@echo "make test            Run the backend tests"
+	@echo "make build-frontend  Type-check and build the frontend"
+	@echo "make docker-up       Build and start both services with Docker Compose"
+	@echo "make docker-down     Stop them"
+	@echo "make clean           Remove Python caches, frontend/dist and frontend/node_modules"
 
 install: install-backend install-frontend
 
 install-backend:
-	cd backend && $(PIP) install -r requirements.txt
+	cd backend && $(PYTHON) -m pip install -r requirements-dev.txt
 
 install-frontend:
 	cd frontend && npm install
 
 backend:
-	cd backend && uvicorn main:app --reload --port 8000
+	cd backend && $(PYTHON) -m uvicorn main:app --reload --port 8000
 
 frontend:
 	cd frontend && npm run dev
 
 test:
-	cd backend && $(PIP) install pytest httpx && pytest tests/ -v
+	cd backend && $(PYTHON) -m pytest tests/ -v
 
 build-frontend:
 	cd frontend && npm run build
 
 docker-up:
-	docker compose up
+	docker compose up --build
 
 docker-down:
 	docker compose down
 
 clean:
-	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
-	rm -rf frontend/dist frontend/node_modules
-
-help:
-	@echo "Common targets:"
-	@echo "  make install        Install backend + frontend deps"
-	@echo "  make backend        Run FastAPI server on :8000"
-	@echo "  make frontend       Run Vite dev server on :5173"
-	@echo "  make test           Run backend tests"
-	@echo "  make docker-up      Run via docker compose"
+	find backend examples -path backend/.venv -prune -o -type d -name __pycache__ -prune -exec rm -rf {} +
+	rm -rf backend/.pytest_cache frontend/dist frontend/node_modules

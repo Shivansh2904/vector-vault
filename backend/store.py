@@ -3,8 +3,9 @@ store.py — FAISS-backed document store for VectorVault.
 
 Manages the mapping between logical documents (with metadata) and the
 underlying FAISS flat-L2 index.  Persistence is handled by writing the
-FAISS index to ``data/index.faiss`` and the metadata dict to
-``data/metadata.json`` on every mutating operation.
+FAISS index to ``<data_dir>/index.faiss`` and the metadata dict to
+``<data_dir>/metadata.json`` on every mutating operation.  ``data_dir``
+defaults to the ``DATA_DIR`` environment variable, or ``data``.
 """
 
 from __future__ import annotations
@@ -18,15 +19,6 @@ from typing import Any
 
 import faiss
 import numpy as np
-
-# ---------------------------------------------------------------------------
-# Paths
-# ---------------------------------------------------------------------------
-
-_DATA_DIR = Path(os.getenv("DATA_DIR", "data"))
-_INDEX_PATH = _DATA_DIR / "index.faiss"
-_META_PATH = _DATA_DIR / "metadata.json"
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -54,8 +46,15 @@ class DocumentStore:
     is fine.  Production use would add an ``asyncio.Lock``.
     """
 
-    def __init__(self, dimension: int = 384) -> None:
+    def __init__(
+        self,
+        dimension: int = 384,
+        data_dir: str | os.PathLike[str] | None = None,
+    ) -> None:
         self._dimension = dimension
+        self._data_dir = Path(data_dir if data_dir is not None else os.getenv("DATA_DIR", "data"))
+        self._index_path = self._data_dir / "index.faiss"
+        self._meta_path = self._data_dir / "metadata.json"
 
         # doc_id → {filename, chunk_count, created_at, chunk_ids: [int, …]}
         self._docs: dict[str, dict[str, Any]] = {}
@@ -76,7 +75,7 @@ class DocumentStore:
 
         self._index: faiss.IndexFlatL2 = faiss.IndexFlatL2(dimension)
 
-        _DATA_DIR.mkdir(parents=True, exist_ok=True)
+        self._data_dir.mkdir(parents=True, exist_ok=True)
         self._load()
 
     # ------------------------------------------------------------------
@@ -85,7 +84,7 @@ class DocumentStore:
 
     def _save(self) -> None:
         """Persist FAISS index and metadata to disk."""
-        faiss.write_index(self._index, str(_INDEX_PATH))
+        faiss.write_index(self._index, str(self._index_path))
         payload = {
             "next_row": self._next_row,
             "deleted_rows": list(self._deleted_rows),
@@ -93,14 +92,14 @@ class DocumentStore:
             "chunk_to_doc": {str(k): v for k, v in self._chunk_to_doc.items()},
             "chunk_texts": {str(k): v for k, v in self._chunk_texts.items()},
         }
-        _META_PATH.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        self._meta_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
     def _load(self) -> None:
         """Reload persisted index and metadata from disk (if present)."""
-        if _INDEX_PATH.exists() and _META_PATH.exists():
+        if self._index_path.exists() and self._meta_path.exists():
             try:
-                self._index = faiss.read_index(str(_INDEX_PATH))
-                payload = json.loads(_META_PATH.read_text(encoding="utf-8"))
+                self._index = faiss.read_index(str(self._index_path))
+                payload = json.loads(self._meta_path.read_text(encoding="utf-8"))
                 self._next_row = payload.get("next_row", 0)
                 self._deleted_rows = set(payload.get("deleted_rows", []))
                 self._docs = payload.get("docs", {})

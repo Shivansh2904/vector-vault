@@ -9,7 +9,7 @@ on:
 jobs:
   # ── Job 1: Python backend ────────────────────────────────────────────────
   python:
-    name: Python — Lint & Import check
+    name: Python — Tests
     runs-on: ubuntu-latest
 
     steps:
@@ -21,54 +21,15 @@ jobs:
         with:
           python-version: '3.11'
           cache: pip
+          cache-dependency-path: backend/requirements*.txt
 
       - name: Install dependencies
         working-directory: backend
-        run: pip install --no-cache-dir -r requirements.txt
-
-      - name: Compile all Python files
-        working-directory: backend
-        run: |
-          python -m py_compile main.py
-          python -m py_compile chunker.py
-          python -m py_compile embedder.py
-          python -m py_compile store.py
-          echo "All Python files compiled successfully"
-
-      - name: Verify chunker logic
-        working-directory: backend
-        run: |
-          python -c "
-          from chunker import chunk_text
-          chunks = chunk_text('hello world ' * 200, chunk_size=50, overlap=10)
-          assert len(chunks) > 1, 'Expected multiple chunks'
-          assert all(isinstance(c, str) and c.strip() for c in chunks)
-          print(f'chunker OK — produced {len(chunks)} chunks')
-          "
-
-      - name: Install test dependencies
-        working-directory: backend
-        run: pip install -r requirements.txt pytest httpx
+        run: pip install -r requirements-dev.txt
 
       - name: Run backend tests
         working-directory: backend
         run: pytest tests/ -v
-
-      - name: Check FastAPI app imports cleanly
-        working-directory: backend
-        run: |
-          python -c "
-          import sys, os
-          # Patch out heavy model loading so the import check is fast
-          import unittest.mock as mock
-          with mock.patch('sentence_transformers.SentenceTransformer') as MockST:
-              inst = mock.MagicMock()
-              inst.get_sentence_embedding_dimension.return_value = 384
-              MockST.return_value = inst
-              from main import app
-              print('FastAPI app imported successfully')
-              print(f'Routes: {[r.path for r in app.routes]}')
-          "
 
   # ── Job 2: TypeScript frontend ───────────────────────────────────────────
   typescript:
