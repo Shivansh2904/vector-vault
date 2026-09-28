@@ -69,3 +69,8 @@ class Embedder:
     def dimension(self) -> int:
         """Embedding dimensionality (384 for all-MiniLM-L6-v2)."""
         return self._model.get_sentence_embedding_dimension()
+
+    @property
+    def tokenizer(self):
+        """The model's own tokenizer, used to size chunks."""
+        return self._model.tokenizer

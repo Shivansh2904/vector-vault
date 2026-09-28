@@ -60,6 +60,11 @@ embedder = Embedder()
 store = DocumentStore(dimension=embedder.dimension)
 reranker = Reranker()
 
+# Chunk size in the embedding model's tokens. all-MiniLM-L6-v2 reads 256
+# tokens including [CLS] and [SEP] and truncates the rest, so 200 leaves room.
+CHUNK_TOKENS = 200
+CHUNK_OVERLAP_TOKENS = 40
+
 # ---------------------------------------------------------------------------
 # Pydantic schemas
 # ---------------------------------------------------------------------------
@@ -202,7 +207,9 @@ async def upload_document(file: UploadFile = File(...)) -> UploadResponse:
         raise HTTPException(status_code=422, detail="No extractable text found in the document")
 
     # Chunk
-    chunks = chunk_text(text, chunk_size=512, overlap=50)
+    chunks = chunk_text(
+        text, embedder.tokenizer, max_tokens=CHUNK_TOKENS, overlap=CHUNK_OVERLAP_TOKENS
+    )
     if not chunks:
         raise HTTPException(status_code=422, detail="Document produced no text chunks")
 
