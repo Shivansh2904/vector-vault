@@ -3,7 +3,7 @@ main.py — VectorVault FastAPI application.
 
 Endpoints
 ---------
-POST   /documents/upload         Upload and index a document (PDF, TXT, MD)
+POST   /documents/upload         Upload and index a document (PDF, TXT, MD, DOCX)
 GET    /documents                List all indexed documents
 GET    /documents/{doc_id}       Get a single document's metadata
 GET    /documents/{doc_id}/chunks Inspect chunks for a single document
@@ -86,7 +86,7 @@ class DocumentMeta(BaseModel):
 class SearchRequest(BaseModel):
     query: str = Field(..., min_length=1, description="Natural-language search query")
     top_k: int = Field(5, ge=1, le=20, description="Number of results to return")
-    rerank: bool = Field(False, description="Use cross-encoder reranking for higher accuracy (slower)")
+    rerank: bool = Field(False, description="Re-score the candidates with a cross-encoder before returning the top_k (slower)")
     candidates_multiplier: int = Field(3, ge=1, le=10, description="When reranking, fetch top_k * this many candidates first")
 
 
@@ -186,7 +186,7 @@ def _extract_text(filename: str, data: bytes) -> str:
     tags=["documents"],
 )
 async def upload_document(file: UploadFile = File(...)) -> UploadResponse:
-    """Accept a PDF, TXT, or MD file, chunk it, embed it, and store it in FAISS."""
+    """Accept a PDF, TXT, MD or DOCX file, chunk it, embed it, and store it in FAISS."""
     filename = file.filename or "unnamed"
     ext = "." + filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
     if ext not in _SUPPORTED_EXTENSIONS:
@@ -284,7 +284,7 @@ async def get_document_chunks(doc_id: str) -> DocumentChunksResponse:
     tags=["documents"],
 )
 async def delete_document(doc_id: str) -> DeleteResponse:
-    """Delete a document and all its associated vectors."""
+    """Delete a document. Its vectors stay in the FAISS index but are filtered out of results."""
     try:
         store.remove_document(doc_id)
     except KeyError:
@@ -303,8 +303,9 @@ async def search(request: SearchRequest) -> SearchResponse:
     """Embed the query and return the top-K most similar document chunks.
 
     When ``rerank`` is true, fetch ``top_k * candidates_multiplier`` candidates
-    via the bi-encoder and re-score them with a cross-encoder for higher
-    accuracy (at the cost of additional latency).
+    via the bi-encoder, re-score them with a cross-encoder and return the
+    ``top_k`` with the highest ``rerank_score``. This adds one cross-encoder
+    pass per candidate.
     """
     stats = store.get_stats()
     if stats["total_chunks"] == 0:

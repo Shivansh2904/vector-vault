@@ -1,3 +1,7 @@
+import asyncio
+import inspect
+
+
 def test_health(client):
     r = client.get("/health")
     assert r.status_code == 200
@@ -133,3 +137,54 @@ def test_each_test_starts_with_an_empty_index(client):
     # Runs after tests that uploaded documents; none of them should be visible.
     assert client.get("/documents").json() == []
     assert client.get("/health").json()["index_vectors"] == 0
+
+
+# ---------------------------------------------------------------------------
+# How the routes call the store
+# ---------------------------------------------------------------------------
+
+# DocumentStore takes no locks. That is safe only while every route is
+# `async def`: FastAPI then runs them all on the event loop thread, one at a
+# time. A plain `def` route would run in a worker thread, concurrently with
+# the others.
+
+
+def test_every_route_is_async(app_module):
+    from fastapi.routing import APIRoute
+
+    routes = [r for r in app_module.app.routes if isinstance(r, APIRoute)]
+    assert routes
+    sync = [r.path for r in routes if not inspect.iscoroutinefunction(r.endpoint)]
+    assert sync == []
+
+
+def test_routes_call_the_store_on_the_event_loop_thread(client, store, upload, monkeypatch):
+    calls: list[tuple[str, bool]] = []
+
+    def record(name, method):
+        def wrapper(*args, **kwargs):
+            try:
+                asyncio.get_running_loop()
+                on_loop = True
+            except RuntimeError:  # a worker thread has no running loop
+                on_loop = False
+            calls.append((name, on_loop))
+            return method(*args, **kwargs)
+        return wrapper
+
+    for name in ("add_document", "remove_document", "search", "list_documents",
+                 "get_chunks", "get_stats"):
+        monkeypatch.setattr(store, name, record(name, getattr(store, name)))
+
+    doc_id = upload("loop.txt", "Which thread calls the store?")["doc_id"]
+    client.get("/documents")
+    client.get(f"/documents/{doc_id}")
+    client.get(f"/documents/{doc_id}/chunks")
+    client.post("/search", json={"query": "thread"})
+    client.get("/health")
+    client.delete(f"/documents/{doc_id}")
+
+    assert {name for name, _ in calls} == {
+        "add_document", "remove_document", "search", "list_documents", "get_chunks", "get_stats",
+    }
+    assert [name for name, on_loop in calls if not on_loop] == []

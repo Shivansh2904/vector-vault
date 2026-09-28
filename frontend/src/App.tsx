@@ -509,7 +509,7 @@ export default function App() {
 
       {/* ── Footer ── */}
       <footer className="border-t border-border py-4 text-center text-xs text-slate-600">
-        VectorVault · sentence-transformers + FAISS · no data leaves your machine
+        VectorVault · sentence-transformers + FAISS
       </footer>
     </div>
   )

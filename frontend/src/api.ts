@@ -70,7 +70,7 @@ async function handleResponse<T>(res: Response): Promise<T> {
 // ---------------------------------------------------------------------------
 
 /**
- * Upload a document file (PDF, TXT, or MD) and index it in FAISS.
+ * Upload a document file (PDF, TXT, MD or DOCX) and index it in FAISS.
  */
 export async function uploadDocument(file: File): Promise<UploadResponse> {
   const form = new FormData()
@@ -92,7 +92,7 @@ export async function listDocuments(): Promise<Document[]> {
 }
 
 /**
- * Delete a document and all its vectors from the index.
+ * Delete a document. Its chunks no longer appear in search results.
  */
 export async function deleteDocument(docId: string): Promise<void> {
   const res = await fetch(`${BASE_URL}/documents/${encodeURIComponent(docId)}`, {

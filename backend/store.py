@@ -48,10 +48,11 @@ class DocumentStore:
     dict maps each FAISS row index (``chunk_id``) back to the owning
     document.
 
-    Thread-safety note: the current implementation is intentionally
-    single-threaded.  FastAPI's default async event loop executes
-    synchronous code in a thread pool, so for a local prototype this
-    is fine.  Production use would add an ``asyncio.Lock``.
+    Not thread-safe: no method takes a lock.  The routes in main.py are
+    all ``async def``, so FastAPI runs them on the event loop thread and
+    the store is only ever called from that one thread.  A plain ``def``
+    route would run in FastAPI's thread pool, and the store would then
+    need a lock.  ``tests/test_api.py`` checks that every route is async.
     """
 
     def __init__(
