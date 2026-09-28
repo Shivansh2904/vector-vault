@@ -11,6 +11,7 @@ defaults to the ``DATA_DIR`` environment variable, or ``data``.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import uuid
 from datetime import datetime, timezone
@@ -19,6 +20,13 @@ from typing import Any
 
 import faiss
 import numpy as np
+
+log = logging.getLogger("vectorvault.store")
+
+
+class StoreLoadError(RuntimeError):
+    """The files in the data directory exist but cannot be used."""
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -83,8 +91,14 @@ class DocumentStore:
     # ------------------------------------------------------------------
 
     def _save(self) -> None:
-        """Persist FAISS index and metadata to disk."""
-        faiss.write_index(self._index, str(self._index_path))
+        """Persist FAISS index and metadata to disk.
+
+        Both files are written under a temporary name and then renamed over
+        the old ones, index first, so a failed write leaves the previous
+        files in place. Renaming metadata.json is the commit point: if the
+        process dies between the two renames, the index has rows at the end
+        that metadata.json does not know about, and ``_load`` drops them.
+        """
         payload = {
             "next_row": self._next_row,
             "deleted_rows": list(self._deleted_rows),
@@ -92,26 +106,62 @@ class DocumentStore:
             "chunk_to_doc": {str(k): v for k, v in self._chunk_to_doc.items()},
             "chunk_texts": {str(k): v for k, v in self._chunk_texts.items()},
         }
-        self._meta_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        index_tmp = self._index_path.with_name(self._index_path.name + ".tmp")
+        meta_tmp = self._meta_path.with_name(self._meta_path.name + ".tmp")
+        faiss.write_index(self._index, str(index_tmp))
+        meta_tmp.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        os.replace(index_tmp, self._index_path)
+        os.replace(meta_tmp, self._meta_path)
 
     def _load(self) -> None:
-        """Reload persisted index and metadata from disk (if present)."""
-        if self._index_path.exists() and self._meta_path.exists():
-            try:
-                self._index = faiss.read_index(str(self._index_path))
-                payload = json.loads(self._meta_path.read_text(encoding="utf-8"))
-                self._next_row = payload.get("next_row", 0)
-                self._deleted_rows = set(payload.get("deleted_rows", []))
-                self._docs = payload.get("docs", {})
-                self._chunk_to_doc = {
-                    int(k): v for k, v in payload.get("chunk_to_doc", {}).items()
-                }
-                self._chunk_texts = {
-                    int(k): v for k, v in payload.get("chunk_texts", {}).items()
-                }
-            except Exception:
-                # Corrupted state — start fresh.
-                self._index = faiss.IndexFlatL2(self._dimension)
+        """Reload persisted index and metadata from disk (if present).
+
+        Raises StoreLoadError rather than starting empty when the files are
+        there but unusable, so a later save cannot overwrite them.
+        """
+        if not self._meta_path.exists():
+            if self._index_path.exists():
+                log.warning(
+                    "%s exists without %s; starting with an empty index",
+                    self._index_path, self._meta_path.name,
+                )
+            return
+
+        try:
+            payload = json.loads(self._meta_path.read_text(encoding="utf-8"))
+            index = faiss.read_index(str(self._index_path))
+        except Exception as exc:
+            raise StoreLoadError(
+                f"Could not load {self._meta_path} and {self._index_path}: {exc}. "
+                "The files have not been changed; move them aside to start with "
+                "an empty index."
+            ) from exc
+
+        next_row = payload.get("next_row", 0)
+        if index.ntotal < next_row:
+            raise StoreLoadError(
+                f"{self._index_path} holds {index.ntotal} vectors but "
+                f"{self._meta_path} expects {next_row}. The files have not been changed."
+            )
+        if index.ntotal > next_row:
+            # The last save stopped after the index was renamed but before
+            # metadata.json was. Rows are only ever appended, so the extra
+            # rows at the end are the ones that were never committed.
+            log.warning(
+                "%s has %d uncommitted vectors from an interrupted save; dropping them",
+                self._index_path, index.ntotal - next_row,
+            )
+            committed = faiss.IndexFlatL2(self._dimension)
+            if next_row:
+                committed.add(index.reconstruct_n(0, next_row))
+            index = committed
+
+        self._index = index
+        self._next_row = next_row
+        self._deleted_rows = set(payload.get("deleted_rows", []))
+        self._docs = payload.get("docs", {})
+        self._chunk_to_doc = {int(k): v for k, v in payload.get("chunk_to_doc", {}).items()}
+        self._chunk_texts = {int(k): v for k, v in payload.get("chunk_texts", {}).items()}
 
     # ------------------------------------------------------------------
     # Public API
